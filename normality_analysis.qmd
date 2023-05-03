@@ -50,10 +50,8 @@ raw_region_zor <- recreate_raw(region_zor) %>%
 raw_path_zor <- recreate_raw(path_zor)
 
 # Make some boxplots
-p_region <- raw_data_boxplot(rreg)
+p_region <- raw_data_boxplot(raw_region_zor)
 p_path <- raw_data_boxplot(raw_path_zor)
-
-
 
 # Make up plots for later display
 p_reg_line <- raw_line_plot(raw_region_zor)
