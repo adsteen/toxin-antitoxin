@@ -1,7 +1,7 @@
 ---
 title: "Why parameteric ANOVA isn't a good idea"
 author: "Drew Steen"
-format: html
+format: gfm
 editor: visual
 ---
 
@@ -74,7 +74,7 @@ These data sets have some subtle differences in distributions among pathotypes/r
 ### Linear model for regions
 
 ```{r}
-region_model <- lm(gene.count ~ category, data=raw_region_data)
+region_model <- lm(gene.count ~ category, data=raw_region_zor)
 summary(aov(region_model))
 ```
 
@@ -91,7 +91,7 @@ I'd say we these residuals are sufficiently non-normally distributed that a line
 ### Linear model for pathotypes
 
 ```{r}
-path_model <- lm(gene.count ~ category, data=raw_path_data)
+path_model <- lm(gene.count ~ category, data=raw_path_zor)
 summary(aov(path_model))
 ```
 
@@ -108,8 +108,8 @@ Same situation here. The QQ-plot is sufficiently not-like-a-straight-line that I
 I propose that we can think of gene distribution as a poisson process, where different values of $\lambda$ indicate different probabilities of the gene being "handed out". If this is the case, we can assess whether there are difference in lambda among regions or pathotypes - but first we need to assess whether the data are, in fact, poisson-distributed. We'll simply load the data, fit it to a poisson distribution, and see whether the fit looks good. I think in this case a qualitative assessment is at least as good as some kind fo statistical test of goodness-of-fit.
 
 ```{r, message = FALSE, warning=FALSE}
-d <- rbind(region %>% mutate(type="region"),
-           path %>% mutate(type="path")) %>%
+d <- rbind(region_zor %>% mutate(type="region"),
+           path_zor %>% mutate(type="path")) %>%
   mutate(category=factor(category, levels = c("Africa","Asia", "Europe", "North America", "Oceania", "South America", "pa", "healthy", "intestinal disease", "urinary disease"), ordere=TRUE))
 
 ggplot(d, aes(x=gene.count, y=count)) + 

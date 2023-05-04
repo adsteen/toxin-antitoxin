@@ -1,7 +1,7 @@
 # Makes boxplot of raw data
 raw_data_boxplot <- function(df) {
   
-  browser()
+  
   df_summ <- df %>%
     group_by(category) %>%
     summarise(mean = mean(gene.count, na.rm=TRUE),
