@@ -1,0 +1,221 @@
+---
+title: "Monte Carlo analysis of test statistic distributions under null hypotheses"
+#format: html
+format: gfm
+editor: visual
+cache: true
+---
+
+# Introduction
+
+The previous analysis showed that parametric ANOVA is 
+
+# zor-orz
+
+
+
+```{r setup, message=FALSE, echo=TRUE}
+library(tidyverse)
+library(MASS)
+library(furrr)
+library(tictoc)
+library(rlang) # this is maybe needed by calculate_mean_diff
+plan(multisession)
+#source("R/helper_funs.R")
+helper_funs <- paste0("R/", dir("R"))
+purrr::walk(helper_funs, source)
+
+theme_set(theme_classic()) 
+```
+
+```{r read_raw_data, echo=TRUE}
+# Load data - 
+# Read in raw zor-orz data
+region_zor <- readxl::read_xlsx("data/FINAL data for Steen.xlsx", 
+                            sheet = "zor-orz gene number",
+                            range = "A11:G18") %>%
+  rename(gene.count = Continent) %>%
+  pivot_longer(-1, names_to = "category", values_to = "count") %>%
+  group_by(category) %>%
+  mutate(freq = count / sum(count, na.rm = TRUE))
+  
+path_zor <- readxl::read_xlsx("data/FINAL data for Steen.xlsx", 
+                            sheet = "zor-orz gene number",
+                            range = "A1:E8") %>%
+  rename(gene.count = Pathotype) %>%
+  pivot_longer(-1, names_to = "category", values_to = "count") %>%
+  group_by(category) %>%
+  mutate(freq = count / sum(count, na.rm = TRUE))
+
+# recreate raw data based on frequencies of gene abundance
+raw_region_zor <- recreate_raw(region_zor) %>%
+  arrange(category) # this appears to have worked
+raw_path_zor <- recreate_raw(path_zor)
+
+```
+
+
+# Monte Carlo simulations
+
+Based on the results of the `normality_analysis.qmd` workbook, it is inappropriate to assume that f-values are distributed based on the f distribution.
+
+```{r monte_carlo}
+# Set the number of monte carlo replicates
+n <- 10000
+nrow.reg <- nrow(region)
+nrow.path <- nrow(path)
+
+
+tic()
+reg.f.vec <- future_map_dbl(seq_along(1:n), 
+                            shuf_calc_f, 
+                            df=region, nrow=nrow.reg, 
+                             .options = furrr_options(seed = TRUE)) 
+path.f.vec <- future_map_dbl(seq_along(1:n), 
+                             shuf_calc_f, 
+                             df=path, nrow=nrow.path, 
+                             .options = furrr_options(seed = TRUE)) 
+toc() # Runs in about 14 seconds on 6 core macbook pro; pretty sweet
+
+# put the simulated f values in a data frame
+f_vals <- data.frame(reg.sim.f = reg.f.vec,
+                     path.sim.f = path.f.vec)
+```
+
+```{r}
+# Pull out actual f values
+reg.f.real <- summary(aov(region_model))[[1]][1,4]
+path.f.real <- summary(aov(path_model))[[1]][1,4]
+```
+
+How do the real f values compare to the simulated, null-hypothesis values?
+
+```{r}
+p_reg_hist <- ggplot(f_vals, aes(x=reg.sim.f)) + 
+  geom_histogram(bins = 100) + 
+  geom_vline(xintercept = reg.f.real, color="red")  + 
+  ggtitle("data by region")
+print(p_reg_hist)
+```
+
+```{r}
+p_path_hist <- ggplot(f_vals, aes(x=path.sim.f)) + 
+  geom_histogram(bins = 100) + 
+  geom_vline(xintercept = path.f.real, color="red") + 
+  ggtitle("data by pathology")
+print(p_path_hist)
+```
+
+So: I have simulated `r format(n, scientific=FALSE, big.mark=",")` and found that, for each case, the actual measured *f* values are much, much larger than they would be likely to be if the null hypothesis were true - so much larger that we can't calculate a p value, because none of our `r format(n, scientific=FALSE, big.mark=",")` simulations captured a *f* value that big. We can say conservatively say that, in each case, p \< 0.0001.
+
+In summary:
+
+```{r, echo=FALSE}
+sim.max.f.print.path <- max(f_vals$path.sim.f) %>%
+  format(digits = 2)
+sim.max.f.print.reg <- max(f_vals$reg.sim.f) %>%
+  format(digits = 2)
+actual.f.path <- path.f.real %>%
+  format(digits = 2)
+actual.f.reg <- reg.f.real %>%
+  format(digits = 2)
+```
+
+| f-value      | Simulated maximum        | Observed          |
+|--------------|--------------------------|-------------------|
+| by pathology | `r sim.max.f.print.path` | `r actual.f.path` |
+| by region    | `r sim.max.f.print.reg`  | `r actual.f.reg`  |
+
+# Monte Carlo Tukey Test
+
+A Tukey test works by comparing means of all possible combinations of populations (in this case, regions or pathotypes) and then comparing to a studentized range distribution. I'm going to do exactly this, except that the studentized range distribution is replaced with the observed distribution of mean differences in shuffled data.
+
+```{r}
+# Let's make a function to calculate actual means and then simulated means
+tic()
+n.tukey <- 1e4
+path_diffs <- monte_carlo_tukey(raw_path_data, n.tukey)
+region_diffs <- monte_carlo_tukey(raw_region_data, n.tukey)
+toc()
+```
+
+# Results
+
+## zor-orz results
+
+```{r}
+knitr::kable(path_diffs)
+```
+
+### How to interpret this table
+
+This is a table comparing differences in the mean gene number between each pair of groups. For instance, the top row is `Africa-Asia`, `mean.diff` indicates that the absolute value of the difference in the mean number of zor/orz genes between Africa and Asia is 0.091. `cutoff.diff`, the "cutoff" above which a difference would be statistically significant (p \< 0.05), is 0.286. 0.091 is not greater than 0.286, so there is no significant difference. Thus, the `sig.diff` entry is FALSE.
+
+`Asia-North America`, does have a significant difference: `cutoff.diff` is 0.087, `mean.diff` is 0.183, so `sig.diff` is TRUE.
+
+```{r}
+knitr::kable(region_diffs)
+```
+
+# tisB - istR analysis
+
+We want to do the same analysis for the tisB-istR gene pair.
+
+First load the data.
+
+```{r}
+# Read in raw zor-orz data
+tisB_region <- readxl::read_xlsx("data/FINAL data for Steen.xlsx", 
+                            sheet = "tisB-istR gene number",
+                            range = "A11:G13") %>%
+  rename(gene.count = Continent) %>%
+  pivot_longer(-1, names_to = "category", values_to = "count") %>%
+  group_by(category) %>%
+  mutate(freq = count / sum(count, na.rm = TRUE))
+
+tisB_path <- readxl::read_xlsx("data/FINAL data for Steen.xlsx", 
+                            sheet = "tisB-istR gene number",
+                            range = "A1:E3") %>%
+  rename(gene.count = Pathotype) %>%
+  pivot_longer(-1, names_to = "category", values_to = "count") %>%
+  group_by(category) %>%
+  mutate(freq = count / sum(count, na.rm = TRUE))
+
+raw_region_tisB <- recreate_raw(tisB_region) %>%
+  arrange(category) # this appears to have worked
+raw_path_tisB <- recreate_raw(tisB_path) %>%
+  arrange(category)
+
+
+tic()
+tisB_region_diffs <- monte_carlo_tukey(raw_region_tisB, n=n.tukey)
+tisB_path_diffs <- monte_carlo_tukey(raw_path_tisB, n=n.tukey)
+toc()
+```
+
+## Monte Carlo anova
+
+```{r}
+tic()
+tisB.reg.f.vec <- future_map_dbl(seq_along(1:n), 
+                            shuf_calc_f, 
+                            df=tisB_region, nrow=nrow.reg, 
+                             .options = furrr_options(seed = TRUE)) 
+tisB.path.f.vec <- future_map_dbl(seq_along(1:n), 
+                             shuf_calc_f, 
+                             df=tisB_path, nrow=nrow.path, 
+                             .options = furrr_options(seed = TRUE)) 
+toc() # Runs 
+```
+
+## tisB-istR regional differences
+
+```{r}
+knitr::kable(tisB_region_diffs)
+```
+
+## tisB-istR pathotype differences
+
+```{r}
+knitr::kable(tisB_path_diffs)
+```
