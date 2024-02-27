@@ -1,5 +1,5 @@
 ---
-title: "Why parameteric ANOVA isn't a good idea"
+title: "Why parameteric ANOVA isn't a good idea for this data set"
 author: "Drew Steen"
 format: gfm
 editor: visual
@@ -11,7 +11,7 @@ The purpose of this analysis is to assess whether parametric ANOVA is an appropr
 
 # zor-orz
 
-```{r, message=FALSE, echo=FALSE}
+```{r, message=FALSE, echo=TRUE}
 library(tidyverse)
 library(MASS)
 library(furrr)
@@ -25,7 +25,7 @@ purrr::walk(helper_funs, source)
 theme_set(theme_classic()) 
 ```
 
-```{r, echo=FALSE}
+```{r, echo=TRUE}
 
 # Read in raw zor-orz data
 region_zor <- readxl::read_xlsx("data/FINAL data for Steen.xlsx", 
@@ -75,10 +75,11 @@ These data sets have some subtle differences in distributions among pathotypes/r
 
 ```{r}
 region_model <- lm(gene.count ~ category, data=raw_region_zor)
+saveRDS(region_model, "data/region_model.rds") # save for other workbooks
 summary(aov(region_model))
 ```
 
-This model finds signficant differences among regions. But before we take this too seriously, let's check whether the residuals are normally distributed. A good way to do that is via a QQ plot. The
+This model finds significant differences among regions. But before we take this too seriously, let's check whether the residuals are normally distributed. A good way to do that is via a QQ plot. The
 
 ```{r}
 plot(region_model, which=2) 
@@ -92,6 +93,7 @@ I'd say we these residuals are sufficiently non-normally distributed that a line
 
 ```{r}
 path_model <- lm(gene.count ~ category, data=raw_path_zor)
+saveRDS(path_model, "data/path_model.rds") # save for main workbook
 summary(aov(path_model))
 ```
 
@@ -136,7 +138,6 @@ d_nest <- d %>%
   
 ```
 
-
 # tisB - istR analysis
 
 We want to do the same analysis for the tisB-istR gene pair.
@@ -168,6 +169,7 @@ raw_path_tisB <- recreate_raw(tisB_path) %>%
 ```
 
 ### Linear models
+
 ```{r}
 tisB_region_model <- lm(gene.count ~ category, data=raw_region_tisB)
 summary(aov(tisB_region_model))
@@ -177,13 +179,15 @@ summary(aov(tisB_region_model))
 plot(tisB_region_model, which=2)
 ```
 
-Wow, that's the worst one yet. 
+Wow, that's the worst one yet.
 
 ```{r}
 tisB_path_model <- lm(gene.count ~ category, data=raw_path_tisB)
 summary(aov(tisB_path_model))
 ```
+
 ```{r}
 plot(tisB_path_model, which=2)
 ```
-Clearly, ANOVA is not the right choice for these data. We'll try a Monte Carlo approach. 
+
+Clearly, ANOVA is not the right choice for these data. We'll try a Monte Carlo approach.
