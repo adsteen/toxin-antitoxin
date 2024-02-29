@@ -8,11 +8,9 @@ cache: true
 
 # Introduction
 
-The previous analysis showed that parametric ANOVA is 
+The previous analysis showed that parametric ANOVA is inappropriate for these datasets, because they're pretty badly unbalanced and because they're 
 
 # zor-orz
-
-
 
 ```{r setup, message=FALSE, echo=TRUE}
 library(tidyverse)
@@ -20,10 +18,11 @@ library(MASS)
 library(furrr)
 library(tictoc)
 library(rlang) # this is maybe needed by calculate_mean_diff
-plan(multisession)
+plan(multisession) # seems like multicore is way faster but I'm working in RStudio which doesn't support multicore
 #source("R/helper_funs.R")
-helper_funs <- paste0("R/", dir("R"))
-purrr::walk(helper_funs, source)
+#helper_funs <- paste0("R/", dir("R"))
+#purrr::walk(helper_funs, source)
+source("helper_funs.R")
 
 theme_set(theme_classic()) 
 ```
@@ -54,43 +53,49 @@ raw_path_zor <- recreate_raw(path_zor)
 
 ```
 
-
 # Monte Carlo simulations
 
-Based on the results of the `normality_analysis.qmd` workbook, it is inappropriate to assume that f-values are distributed based on the f distribution.
+Based on the results of the `normality_analysis.qmd` workbook, it is inappropriate to assume that f-values are distributed according to the f-distribution.
 
 ```{r monte_carlo}
 # Set the number of monte carlo replicates
-n <- 10000
-nrow.reg <- nrow(region)
-nrow.path <- nrow(path)
+n <- 1000 # can change back to 10000
+#nrow.reg <- nrow(region_zor)
+#nrow.path <- nrow(path_zor)
 
 
 tic()
-reg.f.vec <- future_map_dbl(seq_along(1:n), 
-                            shuf_calc_f, 
-                            df=region, nrow=nrow.reg, 
-                             .options = furrr_options(seed = TRUE)) 
-path.f.vec <- future_map_dbl(seq_along(1:n), 
-                             shuf_calc_f, 
-                             df=path, nrow=nrow.path, 
-                             .options = furrr_options(seed = TRUE)) 
-toc() # Runs in about 14 seconds on 6 core macbook pro; pretty sweet
+reg.f.vec <- 1:n |> 
+  future_map_dbl(.f = shuf_calc_f,
+                 df = raw_region_zor,
+                 .options = furrr_options(seed = 2112))
+path.f.vec <- 1:n |> 
+  future_map_dbl(.f = shuf_calc_f,
+                 df = raw_path_zor,
+                 .options = furrr_options(seed = 444))
+toc() # Runs in about 10 seconds on 8 core macbook pro
+#... or about 6 seconds with multicore, but that's not an option
 
 # put the simulated f values in a data frame
 f_vals <- data.frame(reg.sim.f = reg.f.vec,
                      path.sim.f = path.f.vec)
 ```
 
-```{r}
+```{r get_actual_f}
 # Pull out actual f values
-reg.f.real <- summary(aov(region_model))[[1]][1,4]
-path.f.real <- summary(aov(path_model))[[1]][1,4]
+region_model <- lm(gene.count ~ category, data = raw_region_zor)
+#readRDS("data/region_model.rds")
+reg.f.real <- summary(aov(region_model))[[1]][1,4] # 9.335
+path_model <- lm(gene.count ~ category, data = raw_path_zor)
+  #readRDS("data/path_model.rds")
+path.f.real <- summary(aov(path_model))[[1]][1,4] # 46.035
+#path.f.real <- summary(aov(path_model))[[1]][1,4]
 ```
+
 
 How do the real f values compare to the simulated, null-hypothesis values?
 
-```{r}
+```{r plot_by_regions}
 p_reg_hist <- ggplot(f_vals, aes(x=reg.sim.f)) + 
   geom_histogram(bins = 100) + 
   geom_vline(xintercept = reg.f.real, color="red")  + 
@@ -98,7 +103,7 @@ p_reg_hist <- ggplot(f_vals, aes(x=reg.sim.f)) +
 print(p_reg_hist)
 ```
 
-```{r}
+```{r plot_by_pathology}
 p_path_hist <- ggplot(f_vals, aes(x=path.sim.f)) + 
   geom_histogram(bins = 100) + 
   geom_vline(xintercept = path.f.real, color="red") + 
@@ -106,11 +111,11 @@ p_path_hist <- ggplot(f_vals, aes(x=path.sim.f)) +
 print(p_path_hist)
 ```
 
-So: I have simulated `r format(n, scientific=FALSE, big.mark=",")` and found that, for each case, the actual measured *f* values are much, much larger than they would be likely to be if the null hypothesis were true - so much larger that we can't calculate a p value, because none of our `r format(n, scientific=FALSE, big.mark=",")` simulations captured a *f* value that big. We can say conservatively say that, in each case, p \< 0.0001.
+So: I have simulated `r format(n, scientific=FALSE, big.mark=",")` and found that, for each case, the actual measured *f* values are much, much larger than they would be likely to be if the null hypothesis were true - so much larger that we can't calculate a p value, because none of our `r format(n, scientific=FALSE, big.mark=",")` simulations captured a *f* value that big. We can say conservatively say that, in each case, p \< `r 1/n`.
 
 In summary:
 
-```{r, echo=FALSE}
+```{r f_val_data_frame, echo=FALSE}
 sim.max.f.print.path <- max(f_vals$path.sim.f) %>%
   format(digits = 2)
 sim.max.f.print.reg <- max(f_vals$reg.sim.f) %>%
@@ -125,6 +130,98 @@ actual.f.reg <- reg.f.real %>%
 |--------------|--------------------------|-------------------|
 | by pathology | `r sim.max.f.print.path` | `r actual.f.path` |
 | by region    | `r sim.max.f.print.reg`  | `r actual.f.reg`  |
+
+# Human vs non-human animal
+
+We need to do the same test with humans vs non-human animals, for zor-orz and tis-istR.
+
+```{r tis_full_analysis}
+human_tis <- readxl::read_xlsx("data/FINAL data for Steen after reviewer comments.xlsx", 
+                            sheet = "to analyze based on reviewers c",
+                            range = "A2:C4") %>%
+  rename(gene.count = `gene copy number`) %>%
+  pivot_longer(-1, names_to = "category", values_to = "count") %>%
+  group_by(category) %>%
+  mutate(freq = count / sum(count, na.rm = TRUE))
+
+human_zor <- readxl::read_xlsx("data/FINAL data for Steen after reviewer comments.xlsx", 
+                            sheet = "to analyze based on reviewers c",
+                            range = "A10:C17") %>%
+  rename(gene.count = `gene copy number`) %>%
+  pivot_longer(-1, names_to = "category", values_to = "count") %>%
+  group_by(category) %>%
+  mutate(freq = count / sum(count, na.rm = TRUE))
+
+raw_human_tis <- recreate_raw(human_tis) #%>%
+raw_human_orz <- recreate_raw(path_zor)
+```
+
+Now we have to compare the actual f-values for the ANOVA to the distributions of simulated f-values. 
+
+```{r real_human_models}
+human_tis_model <- lm(gene.count ~ category, data = raw_human_tis)
+human.tis.real <-  summary(aov(human_tis_model))[[1]][1,4] # 171.1295
+human_orz_model <- lm(gene.count ~ category, data = raw_human_orz)
+human.orz.real <-  summary(aov(human_orz_model))[[1]][1,4] # 46.03
+```
+
+
+```{r simulate_human_f_values}
+# Make up artificial f values for the human/nonhuman tis data
+# n is set up higher
+#nrow.human.tis <- nrow(raw_human_tis)
+#nrow.human.orz <- nrow(raw_human_orz)
+
+
+
+tic()
+human.tis.f.vec <- future_map_dbl(seq_along(1:n), 
+                            shuf_calc_f, 
+                            df=raw_human_tis, nrow=nrow.reg, 
+                             .options = furrr_options(seed = TRUE)) 
+human.orz.f.vec <- future_map_dbl(seq_along(1:n), 
+                             shuf_calc_f, 
+                             df=path_zor, nrow=nrow.human.orz, 
+                             .options = furrr_options(seed = TRUE)) 
+toc() # Runs in about 14 seconds on 6 core macbook pro; pretty sweet
+
+# put the simulated f values in a data frame
+human_f_vals <- data.frame(human.tis.f = human.tis.f.vec,
+                     human.orz.f = human.orz.f.vec)
+
+p_human_tis <- ggplot(human_f_vals, aes(x=human.tis.f)) +
+  geom_histogram(bins = 100) +
+  geom_vline(xintercept = human.tis.real, color="red") +
+  ggtitle("human-vs-nonhuman tis")
+print(p_human_tis)
+```
+
+```{r}
+p_human_orz <- ggplot(human_f_vals, aes(x=human.orz.f)) +
+  geom_histogram(bins = 100) +
+  geom_vline(xintercept = human.orz.real, color="red") +
+  ggtitle("human-vs-nonhuman orz")
+print(p_human_orz)
+```
+
+Looks like these are both highly significant, again! As before, we can't assign a p value because the observed f value is (way) more extreme than any observed f value in the simulations, but we can say that p < `r 1/n`.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Monte Carlo Tukey Test
 
@@ -199,11 +296,11 @@ toc()
 tic()
 tisB.reg.f.vec <- future_map_dbl(seq_along(1:n), 
                             shuf_calc_f, 
-                            df=tisB_region, nrow=nrow.reg, 
+                            df=raw_region_tisB, 
                              .options = furrr_options(seed = TRUE)) 
 tisB.path.f.vec <- future_map_dbl(seq_along(1:n), 
                              shuf_calc_f, 
-                             df=tisB_path, nrow=nrow.path, 
+                             df=raw_path_tisB, 
                              .options = furrr_options(seed = TRUE)) 
 toc() # Runs 
 ```
