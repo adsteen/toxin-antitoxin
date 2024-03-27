@@ -1,6 +1,6 @@
 # function to recreate raw data from the frequency data
 recreate_raw <- function(d) {
-  
+  #browser()
   # Initialize a zero-row 
   recreated_raw_data <- data.frame("category"=character(0), 
                                    "count"=double(0), 
