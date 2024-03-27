@@ -1,0 +1,3 @@
+# Overview
+
+This analysis contains two main analyses. [normality_analysis.md](normality_analysis.md) shows why we chose a Monte Carlo-based analysis rather than a more straightforward set of ANOVA tests. [monte_carlo.md](monte_carlo.md) has the full results of the Monte Carlo and resampled Tukey analyses. Both notebooks have an associated `.qmd` file that contain executable R files. A file containing helper functions is at [helper_funs.R](helper_funs.R).
