@@ -150,15 +150,33 @@ zor_region_diffs <- monte_carlo_tukey(raw_region_zor, n.tukey)
 ```{r}
 knitr::kable(zor_path_diffs)
 ```
+
+
+
 ### How to interpret this table
 
 This is a table comparing differences in the mean gene number between each pair of groups. For instance, the top row is `Africa-Asia`, `mean.diff` indicates that the absolute value of the difference in the mean number of zor/orz genes between Africa and Asia is 0.091. `cutoff.diff`, the "cutoff" above which a difference would be statistically significant (p \< 0.05), is 0.286. 0.091 is not greater than 0.286, so there is no significant difference. Thus, the `sig.diff` entry is FALSE.
 
 `Asia-North America`, does have a significant difference: `cutoff.diff` is 0.087, `mean.diff` is 0.183, so `sig.diff` is TRUE.
 
+
+# zor region diffs
 ```{r}
 knitr::kable(zor_region_diffs)
 ```
+
+```{r}
+geog_summ_zor <- raw_region_zor |> 
+  group_by(category) |> 
+  summarise(mean.gene.count = mean(gene.count, na.rm=TRUE),
+            sd.gene.count = sd(gene.count, na.rm=TRUE))
+ggplot(geog_summ_zor) +
+  geom_pointrange(aes(x=category, y=mean.gene.count, 
+                      ymin=mean.gene.count - sd.gene.count,
+                      ymax = mean.gene.count + sd.gene.count)) + 
+  ggtitle("zor gene count by geography")
+```
+
 ## tisB results
 
 ```{r}
@@ -172,27 +190,84 @@ path_tis <- readxl::read_xlsx("data/FINAL data for Steen after reviewer comments
   mutate(freq = count / sum(count, na.rm = TRUE))
 raw_path_tis <- recreate_raw(path_tis)
 
+# 
+geog_tis <- readxl::read_xlsx("data/FINAL data for Steen after reviewer comments.xlsx", 
+                            #sheet = "already analyzed tisB-istR gene",
+                            sheet = 3,
+                            range = "A11:E13") %>%
+  rename(gene.count = Continent) %>%
+  pivot_longer(-1, names_to = "category", values_to = "count") %>%
+  group_by(category) %>%
+  mutate(freq = count / sum(count, na.rm = TRUE))
+raw_geog_tis <- recreate_raw(geog_tis)
+
 # simulate f values under resampled data
 path.tis.f.vec <- future_map_dbl(seq_along(1:n), 
                             shuf_calc_f, 
                             df=raw_path_tis, #nrow=nrow(raw_human_tis), 
                              .options = furrr_options(seed = 944)) # fun vehicle in which to not drive 55
-path_tis_f <- data.frame(path.tis.sim.f = path.tis.f.vec)
+geog.tis.f.vec <- future_map_dbl(seq_along(1:n), 
+                            shuf_calc_f, 
+                            df=raw_geog_tis, #nrow=nrow(raw_human_tis), 
+                             .options = furrr_options(seed = 996)) # also fun
+
+sim_tis_f <- data.frame(path.tis.sim.f = path.tis.f.vec,
+                         geog.tis.f.vec = geog.tis.f.vec)
 
 # Identify true f value. To make it comparable, I'll use aov, even though it's just a t test at this point
 m_path_tis <- lm(gene.count ~ category, data = raw_path_tis)
 path.tis.real <- summary(aov(m_path_tis))[[1]][1,4] # 66, almost!
 
-p_path_tis <- ggplot(path_tis_f, aes(x=path.tis.sim.f)) + 
+p_path_tis <- ggplot(sim_tis_f, aes(x=path.tis.sim.f)) + 
   geom_histogram(bins = 100) + 
   geom_vline(xintercept = path.tis.real, color="red") + 
   ggtitle("tis data by pathology")
 print(p_path_tis)
 ```
-#### tis Tukey
+```{r}
+path_summ_tis <- raw_path_tis |> 
+  group_by(category) |> 
+  summarise(mean.gene.count = mean(gene.count, na.rm=TRUE),
+            sd.gene.count = sd(gene.count, na.rm=TRUE))
+ggplot(path_summ_tis) +
+  geom_pointrange(aes(x=category, y=mean.gene.count, 
+                      ymin=mean.gene.count - sd.gene.count,
+                      ymax = mean.gene.count + sd.gene.count)) + 
+  ggtitle("tis gene count by pathology")
+```
+
+```{r}
+m_geog_tis <- lm(gene.count ~ category, data = raw_geog_tis)
+geog.tis.real <- summary(aov(m_geog_tis))[[1]][1,4] # 66, almost!
+p_geog_tis <- ggplot(sim_tis_f, aes(x=geog.tis.sim.f)) + 
+  geom_histogram(bins = 100) + 
+  geom_vline(xintercept = path.tis.real, color="red") + 
+  ggtitle("tis data by geography")
+print(p_path_tis)
+```
+Let's look at what those means look like:
+```{r}
+geog_summ_tis <- raw_geog_tis |> 
+  group_by(category) |> 
+  summarise(mean.gene.count = mean(gene.count, na.rm=TRUE),
+            sd.gene.count = sd(gene.count, na.rm=TRUE))
+ggplot(geog_summ_tis) +
+  geom_pointrange(aes(x=category, y=mean.gene.count, 
+                      ymin=mean.gene.count - sd.gene.count,
+                      ymax = mean.gene.count + sd.gene.count)) + 
+  ggtitle("tis gene count by geography")
+```
+
 
 ```{r}
 tis_path_diffs <- monte_carlo_tukey(raw_path_tis, n.tukey)
+tis_geog_diffs <- monte_carlo_tukey(raw_geog_tis, n.tukey)
+```
+```{r}
+knitr::kable(tis_path_diffs)
+```
+```{r}
+knitr::kable(tis_geog_diffs)
 ```
 
 

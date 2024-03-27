@@ -209,6 +209,22 @@ knitr::kable(zor_region_diffs)
 | North America-South America |   0.6277024 | 1.0857650 | TRUE     |
 | Oceania-South America       |   0.7886147 | 1.6000000 | TRUE     |
 
+# zor region diffs
+
+``` r
+geog_summ_zor <- raw_region_zor |> 
+  group_by(category) |> 
+  summarise(mean.gene.count = mean(gene.count, na.rm=TRUE),
+            sd.gene.count = sd(gene.count, na.rm=TRUE))
+ggplot(geog_summ_zor) +
+  geom_pointrange(aes(x=category, y=mean.gene.count, 
+                      ymin=mean.gene.count - sd.gene.count,
+                      ymax = mean.gene.count + sd.gene.count)) + 
+  ggtitle("zor gene count by geography")
+```
+
+![](monte-carlo_files/figure-commonmark/unnamed-chunk-4-1.png)
+
 ## tisB results
 
 ``` r
@@ -222,31 +238,115 @@ path_tis <- readxl::read_xlsx("data/FINAL data for Steen after reviewer comments
   mutate(freq = count / sum(count, na.rm = TRUE))
 raw_path_tis <- recreate_raw(path_tis)
 
+# 
+geog_tis <- readxl::read_xlsx("data/FINAL data for Steen after reviewer comments.xlsx", 
+                            #sheet = "already analyzed tisB-istR gene",
+                            sheet = 3,
+                            range = "A11:E13") %>%
+  rename(gene.count = Continent) %>%
+  pivot_longer(-1, names_to = "category", values_to = "count") %>%
+  group_by(category) %>%
+  mutate(freq = count / sum(count, na.rm = TRUE))
+raw_geog_tis <- recreate_raw(geog_tis)
+
 # simulate f values under resampled data
 path.tis.f.vec <- future_map_dbl(seq_along(1:n), 
                             shuf_calc_f, 
                             df=raw_path_tis, #nrow=nrow(raw_human_tis), 
                              .options = furrr_options(seed = 944)) # fun vehicle in which to not drive 55
-path_tis_f <- data.frame(path.tis.sim.f = path.tis.f.vec)
+geog.tis.f.vec <- future_map_dbl(seq_along(1:n), 
+                            shuf_calc_f, 
+                            df=raw_geog_tis, #nrow=nrow(raw_human_tis), 
+                             .options = furrr_options(seed = 996)) # also fun
+
+sim_tis_f <- data.frame(path.tis.sim.f = path.tis.f.vec,
+                         geog.tis.f.vec = geog.tis.f.vec)
 
 # Identify true f value. To make it comparable, I'll use aov, even though it's just a t test at this point
 m_path_tis <- lm(gene.count ~ category, data = raw_path_tis)
 path.tis.real <- summary(aov(m_path_tis))[[1]][1,4] # 66, almost!
 
-p_path_tis <- ggplot(path_tis_f, aes(x=path.tis.sim.f)) + 
+p_path_tis <- ggplot(sim_tis_f, aes(x=path.tis.sim.f)) + 
   geom_histogram(bins = 100) + 
   geom_vline(xintercept = path.tis.real, color="red") + 
   ggtitle("tis data by pathology")
 print(p_path_tis)
 ```
 
-![](monte-carlo_files/figure-commonmark/unnamed-chunk-4-1.png)
+![](monte-carlo_files/figure-commonmark/unnamed-chunk-5-1.png)
 
-#### tis Tukey
+``` r
+path_summ_tis <- raw_path_tis |> 
+  group_by(category) |> 
+  summarise(mean.gene.count = mean(gene.count, na.rm=TRUE),
+            sd.gene.count = sd(gene.count, na.rm=TRUE))
+ggplot(path_summ_tis) +
+  geom_pointrange(aes(x=category, y=mean.gene.count, 
+                      ymin=mean.gene.count - sd.gene.count,
+                      ymax = mean.gene.count + sd.gene.count)) + 
+  ggtitle("tis gene count by pathology")
+```
+
+![](monte-carlo_files/figure-commonmark/unnamed-chunk-6-1.png)
+
+``` r
+m_geog_tis <- lm(gene.count ~ category, data = raw_geog_tis)
+geog.tis.real <- summary(aov(m_geog_tis))[[1]][1,4] # 66, almost!
+p_geog_tis <- ggplot(sim_tis_f, aes(x=geog.tis.sim.f)) + 
+  geom_histogram(bins = 100) + 
+  geom_vline(xintercept = path.tis.real, color="red") + 
+  ggtitle("tis data by geography")
+print(p_path_tis)
+```
+
+![](monte-carlo_files/figure-commonmark/unnamed-chunk-7-1.png)
+
+Let’s look at what those means look like:
+
+``` r
+geog_summ_tis <- raw_geog_tis |> 
+  group_by(category) |> 
+  summarise(mean.gene.count = mean(gene.count, na.rm=TRUE),
+            sd.gene.count = sd(gene.count, na.rm=TRUE))
+ggplot(geog_summ_tis) +
+  geom_pointrange(aes(x=category, y=mean.gene.count, 
+                      ymin=mean.gene.count - sd.gene.count,
+                      ymax = mean.gene.count + sd.gene.count)) + 
+  ggtitle("tis gene count by geography")
+```
+
+![](monte-carlo_files/figure-commonmark/unnamed-chunk-8-1.png)
 
 ``` r
 tis_path_diffs <- monte_carlo_tukey(raw_path_tis, n.tukey)
+tis_geog_diffs <- monte_carlo_tukey(raw_geog_tis, n.tukey)
 ```
+
+``` r
+knitr::kable(tis_path_diffs)
+```
+
+| diff.id                            | cutoff.diff | mean.diff | sig.diff |
+|:-----------------------------------|------------:|----------:|:---------|
+| bacteremia-healthy                 |   0.3149235 | 0.1798695 | FALSE    |
+| bacteremia-intestinal disease      |   0.2523880 | 0.8981600 | TRUE     |
+| bacteremia-urinary disease         |   0.2819462 | 0.1105877 | FALSE    |
+| healthy-intestinal disease         |   0.2093195 | 0.7182905 | TRUE     |
+| healthy-urinary disease            |   0.2414464 | 0.0692819 | FALSE    |
+| intestinal disease-urinary disease |   0.1615396 | 0.7875724 | TRUE     |
+
+``` r
+knitr::kable(tis_geog_diffs)
+```
+
+| diff.id              | cutoff.diff | mean.diff | sig.diff |
+|:---------------------|------------:|----------:|:---------|
+| Africa-Asia          |   0.2887051 | 0.0913098 | FALSE    |
+| Africa-Europe        |   0.2885498 | 0.0870197 | FALSE    |
+| Africa-North America |   0.2901554 | 0.0920782 | FALSE    |
+| Asia-Europe          |   0.0825057 | 0.0042901 | FALSE    |
+| Asia-North America   |   0.0847856 | 0.1833879 | TRUE     |
+| Europe-North America |   0.0796523 | 0.1790978 | TRUE     |
 
 # Human vs non-human animal
 
@@ -316,7 +416,7 @@ p_human_tis <- ggplot(human_f_vals, aes(x=human.tis.f)) +
 print(p_human_tis)
 ```
 
-![](monte-carlo_files/figure-commonmark/unnamed-chunk-6-1.png)
+![](monte-carlo_files/figure-commonmark/unnamed-chunk-12-1.png)
 
 ``` r
 p_human_orz <- ggplot(human_f_vals, aes(x=human.orz.f)) +
@@ -326,7 +426,7 @@ p_human_orz <- ggplot(human_f_vals, aes(x=human.orz.f)) +
 print(p_human_orz)
 ```
 
-![](monte-carlo_files/figure-commonmark/unnamed-chunk-7-1.png)
+![](monte-carlo_files/figure-commonmark/unnamed-chunk-13-1.png)
 
 Looks like these are both highly significant, again! As before, we can’t
 assign a p value because the observed f value is (way) more extreme than
