@@ -13,6 +13,23 @@ shuf_calc_f <- function(throwaway, df) { # genuinely do not remember why I wrote
   f
 }
 
+# shuf_calc_f_alt <- function(throwaway, df) { # This is some hacky shit, but
+#   # map iterates over an iterator, which I don't actually use. 
+#   # So I've got a throwaway parameter that doesn't get used. I'm sure 
+#   # there's a better way to do this, but so it goes.
+#   
+#   df.rows <- nrow(df)
+#   
+#   df <- df %>% 
+#     ungroup() %>%
+#     mutate(shuf.data = sample(gene.count, size = df.rows, replace=FALSE)) 
+#   
+#   m <- aov(shuf.data ~ category, data = df)
+#   f <- summary(m)[[1]][1,4]
+#   f
+# }
+
+
 # function to recreate raw data from the frequency data
 recreate_raw <- function(d) {
   

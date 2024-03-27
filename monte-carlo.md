@@ -73,7 +73,7 @@ the 5% cutoff lies.
 
 ``` r
 # Set the number of monte carlo replicates
-n <- 10000 # can change back to 10000
+n <- 10000
 
 #tic()
 reg.f.vec <- 1:n |> 
@@ -149,21 +149,19 @@ distribution of mean differences in shuffled data.
 
 ``` r
 # Let's make a function to calculate actual means and then simulated means
-tic()
+#tic()
 n.tukey <- 1e4
-path_diffs <- monte_carlo_tukey(raw_path_zor, n.tukey)
-region_diffs <- monte_carlo_tukey(raw_region_zor, n.tukey)
-toc()
+zor_path_diffs <- monte_carlo_tukey(raw_path_zor, n.tukey)
+zor_region_diffs <- monte_carlo_tukey(raw_region_zor, n.tukey)
+#toc() # about 13 seconds on my laptop
 ```
-
-    35.471 sec elapsed
 
 # Results
 
 ## zor-orz results
 
 ``` r
-knitr::kable(path_diffs)
+knitr::kable(zor_path_diffs)
 ```
 
 | diff.id                            | cutoff.diff | mean.diff | sig.diff |
@@ -190,7 +188,7 @@ entry is FALSE.
 is 0.087, `mean.diff` is 0.183, so `sig.diff` is TRUE.
 
 ``` r
-knitr::kable(region_diffs)
+knitr::kable(zor_region_diffs)
 ```
 
 | diff.id                     | cutoff.diff | mean.diff | sig.diff |
@@ -210,6 +208,45 @@ knitr::kable(region_diffs)
 | North America-Oceania       |   0.4927248 | 0.5142350 | TRUE     |
 | North America-South America |   0.6277024 | 1.0857650 | TRUE     |
 | Oceania-South America       |   0.7886147 | 1.6000000 | TRUE     |
+
+## tisB results
+
+``` r
+path_tis <- readxl::read_xlsx("data/FINAL data for Steen after reviewer comments.xlsx", 
+                            #sheet = "already analyzed tisB-istR gene",
+                            sheet = 3,
+                            range = "A1:E3") %>%
+  rename(gene.count = Pathotype) %>%
+  pivot_longer(-1, names_to = "category", values_to = "count") %>%
+  group_by(category) %>%
+  mutate(freq = count / sum(count, na.rm = TRUE))
+raw_path_tis <- recreate_raw(path_tis)
+
+# simulate f values under resampled data
+path.tis.f.vec <- future_map_dbl(seq_along(1:n), 
+                            shuf_calc_f, 
+                            df=raw_path_tis, #nrow=nrow(raw_human_tis), 
+                             .options = furrr_options(seed = 944)) # fun vehicle in which to not drive 55
+path_tis_f <- data.frame(path.tis.sim.f = path.tis.f.vec)
+
+# Identify true f value. To make it comparable, I'll use aov, even though it's just a t test at this point
+m_path_tis <- lm(gene.count ~ category, data = raw_path_tis)
+path.tis.real <- summary(aov(m_path_tis))[[1]][1,4] # 66, almost!
+
+p_path_tis <- ggplot(path_tis_f, aes(x=path.tis.sim.f)) + 
+  geom_histogram(bins = 100) + 
+  geom_vline(xintercept = path.tis.real, color="red") + 
+  ggtitle("tis data by pathology")
+print(p_path_tis)
+```
+
+![](monte-carlo_files/figure-commonmark/unnamed-chunk-4-1.png)
+
+#### tis Tukey
+
+``` r
+tis_path_diffs <- monte_carlo_tukey(raw_path_tis, n.tukey)
+```
 
 # Human vs non-human animal
 
@@ -245,29 +282,14 @@ distributions of simulated f-values.
 ``` r
 # Make up artificial f values for the human/nonhuman tis data
 # Not even sure whether this is different, but it works after fixing some silly errors
-shuf_calc_f_alt <- function(throwaway, df) { # This is some hacky shit, but
-  # map iterates over an iterator, which I don't actually use. 
-  # So I've got a throwaway parameter that doesn't get used. I'm sure 
-  # there's a better way to do this, but so it goes.
-  
-  df.rows <- nrow(df)
-  
-  df <- df %>% 
-    ungroup() %>%
-    mutate(shuf.data = sample(gene.count, size = df.rows, replace=FALSE)) 
-  
-  m <- aov(shuf.data ~ category, data = df)
-  f <- summary(m)[[1]][1,4]
-  f
-}
 
 # Iterate the shuffle-and-count-f function n times; place data in a vector
 human.tis.f.vec <- future_map_dbl(seq_along(1:n), 
-                            shuf_calc_f_alt, 
+                            shuf_calc_f, 
                             df=raw_human_tis, #nrow=nrow(raw_human_tis), 
                              .options = furrr_options(seed = 55)) # a speed at which I can't drive
 human.orz.f.vec <- future_map_dbl(seq_along(1:n), 
-                             shuf_calc_f_alt, 
+                             shuf_calc_f, 
                              df=path_zor, #nrow=nrow(raw_human_orz), 
                              .options = furrr_options(seed = 99991)) # allegedly the largest 5-digit prime number 
 #toc() # Runs in about 14 seconds on 6 core macbook pro; pretty sweet
@@ -294,7 +316,7 @@ p_human_tis <- ggplot(human_f_vals, aes(x=human.tis.f)) +
 print(p_human_tis)
 ```
 
-![](monte-carlo_files/figure-commonmark/unnamed-chunk-4-1.png)
+![](monte-carlo_files/figure-commonmark/unnamed-chunk-6-1.png)
 
 ``` r
 p_human_orz <- ggplot(human_f_vals, aes(x=human.orz.f)) +
@@ -304,7 +326,7 @@ p_human_orz <- ggplot(human_f_vals, aes(x=human.orz.f)) +
 print(p_human_orz)
 ```
 
-![](monte-carlo_files/figure-commonmark/unnamed-chunk-5-1.png)
+![](monte-carlo_files/figure-commonmark/unnamed-chunk-7-1.png)
 
 Looks like these are both highly significant, again! As before, we can’t
 assign a p value because the observed f value is (way) more extreme than
