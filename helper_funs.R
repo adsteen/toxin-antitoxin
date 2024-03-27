@@ -7,9 +7,7 @@ shuf_calc_f <- function(throwaway, df) { # genuinely do not remember why I wrote
     ungroup() %>%
     #mutate(shuf.cat = sample(category, size = nrow, replace=FALSE))
     mutate(shuf.data = sample(gene.count, size = df.rows, replace=FALSE)) 
-  #uniques <- length(unique(df$shuf.cat))
-  #stop("FART")
-  #m <- aov(df$gene.count ~ df$shuf.cat)
+  
   m <- aov(shuf.data ~ category, data = df)
   f <- summary(m)[[1]][1,4]
   f
@@ -132,7 +130,6 @@ shuf_and_calc_means <- function(df, shuf = FALSE, ...) { # the ... has to be the
   
   # Calculate mean differences for each set of groups
   diffs <- calc_mean_diff(means)
-  #browser()
   diffs
 }
 
@@ -141,9 +138,6 @@ sim_list_to_df <- function(sim_list, summarise = FALSE, alpha = 0.95) {
   #browser()
   df <- sim_list %>% 
     bind_rows(.id = "id") #%>%
-    #mutate(dif.id = paste(category.1, category.2, sep = "-")) %>%
-    #dplyr::select(!c(category.1, category.2)) #%>%
-    #pivot_wider(names_from = "dif.id", values_from = "mean.diff")
   
   if(summarise) {
     df <- df %>%
@@ -155,7 +149,6 @@ sim_list_to_df <- function(sim_list, summarise = FALSE, alpha = 0.95) {
 
 # Create tukey test by measuring grouip mean differences in shuffled data
 monte_carlo_tukey <- function(raw_data, n) {
- # browser()
   # Calculate the observed differences between treatment means
   actual_mean_diffs <- shuf_and_calc_means(raw_data, shuf = FALSE)
   
@@ -171,21 +164,3 @@ monte_carlo_tukey <- function(raw_data, n) {
   
   comparison
 }
-
-# read_gene_freq_data.OLD <- function(filename) {
-#   d <- read_csv(filename)
-#   
-#   # Remove the "total" row if there is one
-#   total.row <- str_detect(str_to_lower(d$`gene number`), "total")
-#   d <- d %>% filter(!total.row)
-#   
-#   # Make the data set long, change the `gene number` column name to gene.count, and calulate frequency of gene count within a category
-#   d <- d %>%
-#     pivot_longer(cols = -1, names_to = "category", values_to = "count") %>%
-#     mutate(gene.count = as.numeric(`gene number`)) %>%
-#     dplyr::select(-`gene number`) %>%
-#     group_by(category) %>%
-#     mutate(freq = count / sum(count, na.rm = TRUE)) %>%
-#     arrange(category, count)
-#   d
-# }
